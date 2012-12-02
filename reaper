@@ -1,0 +1,41 @@
+#!/bin/bash -e
+# id: krkl
+
+# Angel maintains CNAME of http://krkl.natalian.org to point to one of the
+# HOSTS. natalian.org domain renewal needs to maintained by Angel too
+
+# reaper script runs @daily in a cronjob, notifies an Angel if there is any
+# problems on a series of backups
+
+# if there is a problem, a new backup should be made
+
+# Four ways to bomb out, by ping, by no SHA1SUMS, by failing to d/l file, by
+# failing sha1 check
+
+# many reapers can be run at one time in different places
+
+# todo: keep a state file to only notify after 3 fails in a row?
+# todo: keep hosts file remotly too
+
+tmp=$(mktemp -u)
+
+while read host
+do
+	echo Pinging $host
+	ping -c 1 $(echo $host | awk -F/ '{print $3}') &> /dev/null
+	# Some how compare SHA1SUMs?
+	curl -s -f $host/SHA1SUMS | sort -R | head -n1 > $tmp
+	echo Checking for $host/SHA1SUMS
+	test -s $tmp
+	while read sha file
+	do
+		echo Checking $host/$file $sha
+		curl -f $host/$file -o $file
+		if sha1sum -c $tmp
+		then
+			rm -f $file $tmp
+		fi
+	done < $tmp
+done < hosts
+
+rm -f $tmp
